@@ -8,6 +8,7 @@ import cors from "cors";
  */
 import { LobbyRoom } from "./rooms/LobbyRoom";
 import { GameRoom } from "./rooms/GameRoom";
+
 import { Matchmaker } from "./matching/Matchmaker";
 
 export default config({

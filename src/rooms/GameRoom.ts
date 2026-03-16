@@ -7,13 +7,6 @@ import { GamePhysics } from "../physics/GamePhysics";
 import { PhysicsConstants } from "../constants/PhysicsConstants";
 
 /**
- * 할일
- * 1. 서버에서 플레이어 위치 관리
- * 2. 공 위치 관리
- * 3. 충돌 관리
- */
-
-/**
  * 게임 룸
  * - 매칭 완료된 4명의 플레이어가 게임을 진행
  * - 게임 종료 후 로비로 복귀

@@ -149,14 +149,6 @@ export class LobbyRoom extends Room<LobbyRoomState> {
       console.log(`[LobbyRoom] Player ${client.sessionId} cancelled matching`);
       client.send("match_status", { inQueue: false });
     });
-
-    // // 준비 상태 토글
-    // this.onMessage("toggle_ready", (client) => {
-    //   const player = this.state.players.find(p => p.sessionId === client.sessionId);
-    //   if (player) {
-    //     player.isReady = !player.isReady;
-    //   }
-    // });
   }
 }
 

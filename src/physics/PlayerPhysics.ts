@@ -144,8 +144,6 @@ export class PlayerPhysics {
         const isOnGround = Math.abs(playerBottom - groundTop) < 0.1;
         if (isOnGround && velocity.velY <= 0) {
           velocity.velY = PhysicsConstants.PLAYER_JUMP_VELOCITY;
-          // console.log(`[GamePhysics] Player ${player.sessionId} jumped`);
-
           this.room.broadcast("jump", { sessionId: player.sessionId });
         }
 

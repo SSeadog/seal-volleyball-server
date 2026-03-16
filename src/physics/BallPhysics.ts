@@ -1,6 +1,8 @@
 import { Room } from "@colyseus/core";
 import { GameRoomState } from "../rooms/schema/GameRoomState";
 import { PhysicsConstants } from "../constants/PhysicsConstants";
+import { SpikeDirection } from "./PlayerPhysics";
+import { ScoreManager } from "./ScoreManager";
 
 /**
  * 지형 정보 (땅)
@@ -20,13 +22,6 @@ export interface Net {
   y: number;      // Y 좌표 (중심)
   width: number;  // 너비 (두께)
   height: number; // 높이
-}
-
-/** 스파이크 방향/강도 */
-export enum SpikeDirection {
-  Neutral = "neutral",
-  Forward = "forward",
-  Backward = "backward",
 }
 
 /**
@@ -49,17 +44,18 @@ export class BallPhysics {
   private cachedPredictedLandingX: number | null = null;
   /** 마지막으로 공을 터치한 플레이어의 sessionId (AI가 본인 터치 시 가만히 있도록 사용) */
   private lastTouchedBySessionId: string = "";
-  /** 마지막 득점을 한 팀 (0=left, 1=right) */
-  private lastScoringTeam: 0 | 1 = 0;
+  /** 점수 판정 후 공 리셋 전까지 추가 점수 계산 방지 */
+  private scoreAppliedPendingReset: boolean = false;
 
-  /** 코트 X 경계 (네트 0 기준, 절반 코트 폭). 이 안이면 코트 안, 밖이면 코트 밖 */
-  private static readonly COURT_HALF_WIDTH = 15;
+  private scoreManager: ScoreManager;
 
   constructor(
     private room: Room<GameRoomState>,
     private grounds: Ground[],
     private nets: Net[]
-  ) {}
+  ) {
+    this.scoreManager = new ScoreManager(room);
+  }
 
   initialize(): void {
     // 맵 초기화: (0, -0.5) 좌표에 높이 1, 가로 100짜리 땅 추가
@@ -88,30 +84,13 @@ export class BallPhysics {
     this.ballInitialVelY = ball.velY;
   }
 
-  /**
-   * 득점 팀(0=left, 1=right)에 따라 점수 증가 + 공 초기화 + judge 브로드캐스트
-   */
-  private applyScoreAndReset(scoringTeam: 0 | 1): void {
-    const state = this.room.state;
-    if (scoringTeam === 0) {
-      state.leftTeamScore++;
-    } else {
-      state.rightTeamScore++;
-    }
-     this.lastScoringTeam = scoringTeam;
-    console.log(
-      `[BallPhysics] 점수 판정: ${scoringTeam === 0 ? "left" : "right"} 팀 득점 → left ${state.leftTeamScore} : ${state.rightTeamScore} right`
-    );
+  /** 득점 후 볼 리셋 예약 (ScoreManager.applyScoreAndReset에서 호출) */
+  private scheduleBallReset(delayMs: number): void {
     if (this.ballResetTimeout) {
       clearTimeout(this.ballResetTimeout);
       this.ballResetTimeout = undefined;
     }
-    
-    setTimeout(() => {
-      this.resetBall();
-    }, 3000);
-      
-    this.room.broadcast("judge", scoringTeam);
+    this.ballResetTimeout = setTimeout(() => this.resetBall(), delayMs);
   }
 
   /**
@@ -122,52 +101,29 @@ export class BallPhysics {
   update(deltaTime: number, tickCount: number): void {
     const ball = this.room.state.volleyBall;
 
-    // 3번 초과 터치(4번째 터치) 시 마지막 터치 팀 실점 → 상대 득점
-    const touchCount = ball.touchCount ?? 0;
-    if (touchCount == 4) {
-      const lastTouchTeam = ball.owningTeam ?? -1;
-      const scoringTeam: 0 | 1 = lastTouchTeam === 0 ? 1 : 0;
-      this.applyScoreAndReset(scoringTeam);
-      return;
-    }
-
-    // 땅에 닿은 뒤 2틱 동안은 유예, 그 이후에는 강제로 땅 판정 실행
-    if (
-      this.groundTouchedTick !== null &&
-      !this.ballHitGround &&
-      tickCount - this.groundTouchedTick >= 2
-    ) {
-      this.ballHitGround = true;
-
-      const netX = this.nets[0]?.x ?? 0;
-      const inCourtLeft =
-        -BallPhysics.COURT_HALF_WIDTH <= ball.posX && ball.posX < netX;
-      const inCourtRight =
-        netX <= ball.posX && ball.posX <= BallPhysics.COURT_HALF_WIDTH;
-      const inCourt = inCourtLeft || inCourtRight;
-
-      let scoringTeam: 0 | 1;
-      if (inCourt) {
-        // 코트 안 땅: 떨어진 위치 코트 팀 실점 → 상대 득점
-        scoringTeam = ball.posX < netX ? 1 : 0;
-      } else {
-        // 코트 밖 땅: 마지막 터치 팀 실점 → 상대 득점
-        const lastTouchTeam = ball.owningTeam ?? -1;
-        scoringTeam = lastTouchTeam === 0 ? 1 : 0;
+    // 점수 판정 후 공 리셋 전에는 추가 점수 계산 안 함
+    if (!this.scoreAppliedPendingReset) {
+      // 3번 초과 터치(4번째 터치) 시 마지막 터치 팀 실점 → 상대 득점
+      const scoringTeamFour = this.scoreManager.getScoringTeamForFourTouches(ball);
+      if (scoringTeamFour !== null) {
+        this.scoreAppliedPendingReset = true;
+        this.scoreManager.applyScoreAndReset(scoringTeamFour, this.scheduleBallReset.bind(this));
+        ball.touchCount = -1;
+        return;
       }
 
-      const state = this.room.state;
-      if (scoringTeam === 0) state.leftTeamScore++;
-      else state.rightTeamScore++;
-      this.lastScoringTeam = scoringTeam;
-      console.log(
-        `[BallPhysics] 점수 판정(땅): ${scoringTeam === 0 ? "left" : "right"} 팀 득점 → left ${state.leftTeamScore} : ${state.rightTeamScore} right`
-      );
-      this.room.broadcast("judge", scoringTeam);
-
-      this.ballResetTimeout = setTimeout(() => {
-        this.resetBall();
-      }, 3000);
+      // 땅에 닿은 뒤 2틱 동안은 유예, 그 이후에는 강제로 땅 판정 실행
+      if (
+        this.groundTouchedTick !== null &&
+        !this.ballHitGround &&
+        tickCount - this.groundTouchedTick >= 2
+      ) {
+        this.ballHitGround = true;
+        this.scoreAppliedPendingReset = true;
+        const netX = this.nets[0]?.x ?? 0;
+        const scoringTeam = this.scoreManager.getScoringTeamForGroundTouch(ball, netX);
+        this.scoreManager.applyScoreAndReset(scoringTeam, this.scheduleBallReset.bind(this));
+      }
     }
 
     // 리셋 후 공중에 머무는 시간이 남아있으면 물리 시뮬레이션 건너뛰기
@@ -175,9 +131,8 @@ export class BallPhysics {
       this.ballResetHoverTime -= deltaTime;
       if (this.ballResetHoverTime <= 0) {
         // 공중에 머무는 시간이 끝나면 초기 위치로 이동
-        ball.posX = this.lastScoringTeam === 0
-        ? this.ballInitialPosX
-        : -this.ballInitialPosX;
+        const lastScoring = this.scoreManager.getLastScoringTeam();
+        ball.posX = lastScoring === 0 ? this.ballInitialPosX : -this.ballInitialPosX;
         ball.posY = this.ballInitialPosY;
         ball.velX = this.ballInitialVelX;
         ball.velY = this.ballInitialVelY;
@@ -370,10 +325,8 @@ export class BallPhysics {
     const ball = this.room.state.volleyBall;
 
     // 공을 초기 위치로 이동 (공중에 머물도록)
-    ball.posX =
-      this.lastScoringTeam === 0
-        ? this.ballInitialPosX
-        : -this.ballInitialPosX;
+    const lastScoring = this.scoreManager.getLastScoringTeam();
+    ball.posX = lastScoring === 0 ? this.ballInitialPosX : -this.ballInitialPosX;
     ball.posY = this.ballInitialPosY; // 초기 위치에서 머물기
     ball.velX = 0;
     ball.velY = 0; // 속도 0으로 설정 (공중에 정지)
@@ -388,6 +341,7 @@ export class BallPhysics {
     this.ballResetHoverTime = 1.0; // 1초
 
     this.ballHitGround = false;
+    this.scoreAppliedPendingReset = false;
     this.room.broadcast("resetBall");
 
     // console.log(

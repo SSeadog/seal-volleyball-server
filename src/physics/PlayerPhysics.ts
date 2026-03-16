@@ -2,10 +2,17 @@ import { Room } from "@colyseus/core";
 import { GameRoomState } from "../rooms/schema/GameRoomState";
 import { PhysicsConstants } from "../constants/PhysicsConstants";
 import { PlayerInputData } from "../rooms/schema/Player";
-import { Net, SpikeDirection } from "./BallPhysics";
+import { Net } from "./BallPhysics";
 import type { BallPhysics } from "./BallPhysics";
 import { AIController } from "../ai/AIController";
 import { PlayerHelper } from "../helpers/PlayerHelper";
+
+/** 스파이크 방향/강도 (PlayerPhysics에서 관리) */
+export enum SpikeDirection {
+  Neutral = "neutral",
+  Forward = "forward",
+  Backward = "backward",
+}
 
 /**
  * 플레이어 물리 전담 클래스

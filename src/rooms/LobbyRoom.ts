@@ -41,8 +41,10 @@ export class LobbyRoom extends Room<LobbyRoomState> {
 
     console.log(`[LobbyRoom] Room ${this.roomId} now has ${this.state.players.length} players`);
 
-    // 클라에게 플레이어 참여했다고 신호 전송
-    this.broadcast("playerJoined", player);
+    // 클라에게 플레이어 참여했다고 신호 전송 (100ms 지연)
+    setTimeout(() => {
+      this.broadcast("playerJoined", player);
+    }, 100);
   }
 
   onLeave(client: Client, consented: boolean) {

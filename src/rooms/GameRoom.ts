@@ -102,7 +102,11 @@ export class GameRoom extends Room<GameRoomState> {
       player.teamIndex = options.teamIndex ?? (player.playerIndex < 2 ? 0 : 1); // teamIndex가 없는 경우 playerIndex 기준으로 직접 할당
       this.setPlayerPosition(player, player.playerIndex);
       this.state.players.push(player);
-      this.broadcast("playerJoined", player);
+      
+      // 클라에게 플레이어 참여했다고 신호 전송 (100ms 지연)
+      setTimeout(() => {
+        this.broadcast("playerJoined", player);
+      }, 100);
     }
 
     // playerInput 초기화

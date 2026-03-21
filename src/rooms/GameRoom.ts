@@ -335,8 +335,8 @@ export class GameRoom extends Room<GameRoomState> {
       const player = players[i];
       const lastInput = this.playerLastInput.get(player.sessionId)!;
 
-      while (player.inputQueue.length > 0) {
-        const input = player.inputQueue[0] as PlayerInputData | undefined;
+      while (!player.inputQueue.isEmpty) {
+        const input = player.inputQueue.peek() as PlayerInputData | undefined;
         if (!input) {
           player.inputQueue.shift();
           continue;

@@ -1,5 +1,6 @@
 import { Schema, type } from "@colyseus/schema";
 import { PhysicsConstants } from "../../constants/PhysicsConstants";
+import { LinkedList } from "../../helpers/LinkedList";
 
 export class Player extends Schema {
   @type("string") sessionId: string = "";
@@ -11,7 +12,7 @@ export class Player extends Schema {
   @type("boolean") isReady: boolean = false;
   @type("boolean") isInMatchQueue: boolean = false; // 매칭 큐에 등록되어 있는지
   
-  inputQueue: PlayerInputData[] = [];
+  inputQueue: LinkedList<PlayerInputData> = new LinkedList<PlayerInputData>();
 
   // 플레이어 좌표
   @type("number") posX: number = 0;

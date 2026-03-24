@@ -1,7 +1,8 @@
-import { Room, Client } from "@colyseus/core";
+import { Room, Client, matchMaker } from "@colyseus/core";
 import { GameRoomState } from "./schema/GameRoomState";
 import { Player, PlayerInputData } from "./schema/Player";
 import { AIPlayerManager } from "../ai/AIPlayerManager";
+import { LinkedList } from "../helpers/LinkedList";
 import { GamePhase } from "../types/GamePhase";
 import { GamePhysics } from "../physics/GamePhysics";
 import { PhysicsConstants } from "../constants/PhysicsConstants";
@@ -20,6 +21,7 @@ export class GameRoom extends Room<GameRoomState> {
   private physics!: GamePhysics;
   // 플레이어 마지막 입력 상태 (sessionId -> PlayerInputData). inputQueue → 여기로 갱신 후 물리에서 사용
   private playerLastInput: Map<string, PlayerInputData> = new Map();
+  private playerInputQueues: Map<string, LinkedList<PlayerInputData>> = new Map();
   // 게임 루프
   private gameLoopInterval?: NodeJS.Timeout;
   // 서버 틱 카운트
@@ -72,6 +74,7 @@ export class GameRoom extends Room<GameRoomState> {
         toss: false,
         spike: false,
       });
+      this.playerInputQueues.set(aiPlayer.sessionId, new LinkedList<PlayerInputData>());
     }
 
     
@@ -109,6 +112,11 @@ export class GameRoom extends Room<GameRoomState> {
       }, 100);
     }
 
+    // 원래 로비 룸 ID (게임 종료 후 복귀용). 클라이언트 join 시 lobbyRoomId 전달 필요
+    if (options?.lobbyRoomId) {
+      this.playerLobbyRoomMap.set(client.sessionId, options.lobbyRoomId);
+    }
+
     // playerInput 초기화
     this.playerLastInput.set(player.sessionId, {
       sessionId: player.sessionId,
@@ -119,6 +127,9 @@ export class GameRoom extends Room<GameRoomState> {
       toss: false,
       spike: false,
     });
+    if (!this.playerInputQueues.has(player.sessionId)) {
+      this.playerInputQueues.set(player.sessionId, new LinkedList<PlayerInputData>());
+    }
   }
 
   /**
@@ -171,6 +182,8 @@ export class GameRoom extends Room<GameRoomState> {
       console.log(`[GameRoom] All human players left, disposing room ${this.roomId}`);
       this.disconnect();
     }
+
+    this.playerInputQueues.delete(client.sessionId);
   }
 
   onDispose() {
@@ -211,12 +224,18 @@ export class GameRoom extends Room<GameRoomState> {
       }
     });
 
+
+    console.log("[GameRoom] playersByLobbyRoom size: ", playersByLobbyRoom.size);
     // 각 로비 룸별로 복귀 메시지 전송
-    playersByLobbyRoom.forEach((clients, lobbyRoomId) => {
-      console.log(`[GameRoom] Sending ${clients.length} players back to lobby room ${lobbyRoomId}`);
+    playersByLobbyRoom.forEach(async (clients, lobbyRoomId) => {
+      // lobbyRoomId로 로비 룸 생성
+      await matchMaker.createRoom("lobby_room", {
+        restoreLobbyRoomId: lobbyRoomId,
+      });
       
       clients.forEach((client) => {
         try {
+          console.log(`[GameRoom] Sending ${clients.length} players back to lobby room ${lobbyRoomId}`);
           client.send("return_to_lobby", {
             lobbyRoomId: lobbyRoomId,
             roomName: "lobby_room"
@@ -290,7 +309,7 @@ export class GameRoom extends Room<GameRoomState> {
       }
 
       // enqueue input to user input buffer.
-      player.inputQueue.push(message);
+      this.getOrCreateInputQueue(player.sessionId).push(message);
     });
   }
 
@@ -338,11 +357,12 @@ export class GameRoom extends Room<GameRoomState> {
     for (let i = 0; i < players.length; i++) {
       const player = players[i];
       const lastInput = this.playerLastInput.get(player.sessionId)!;
+      const inputQueue = this.getOrCreateInputQueue(player.sessionId);
 
-      while (!player.inputQueue.isEmpty) {
-        const input = player.inputQueue.peek() as PlayerInputData | undefined;
+      while (!inputQueue.isEmpty) {
+        const input = inputQueue.peek() as PlayerInputData | undefined;
         if (!input) {
-          player.inputQueue.shift();
+          inputQueue.shift();
           continue;
         }
 
@@ -352,7 +372,7 @@ export class GameRoom extends Room<GameRoomState> {
             console.warn(
               `[GameRoom] Dropping stale input from ${player.sessionId}: inputTick=${input.tick}, serverTick=${tickCount}`
             );
-            player.inputQueue.shift();
+            inputQueue.shift();
             continue;
           }
           if (input.tick > tickCount) {
@@ -360,7 +380,7 @@ export class GameRoom extends Room<GameRoomState> {
           }
         }
 
-        player.inputQueue.shift();
+        inputQueue.shift();
         lastInput.left = input.left;
         lastInput.right = input.right;
         lastInput.jump = input.jump ? input.jump : lastInput.jump;
@@ -371,6 +391,14 @@ export class GameRoom extends Room<GameRoomState> {
     }
   }
 
+  private getOrCreateInputQueue(sessionId: string): LinkedList<PlayerInputData> {
+    let q = this.playerInputQueues.get(sessionId);
+    if (!q) {
+      q = new LinkedList<PlayerInputData>();
+      this.playerInputQueues.set(sessionId, q);
+    }
+    return q;
+  }
   /**
    * 서버 게임 루프 정지
    */

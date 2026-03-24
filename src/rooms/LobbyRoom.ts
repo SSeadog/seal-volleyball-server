@@ -16,6 +16,11 @@ export class LobbyRoom extends Room<LobbyRoomState> {
   private matchmaker = Matchmaker.getInstance();
 
   onCreate(options: any) {
+    // 게임 종료 후 동일 roomId로 로비를 다시 만들 때 (GameRoom → matchMaker.createRoom)
+    if (options?.restoreLobbyRoomId) {
+      this.roomId = options.restoreLobbyRoomId;
+      console.log(`[LobbyRoom] Restored room ${this.roomId}`);
+    }
     this.state.roomId = this.roomId;
     this.state.maxPlayers = 4;
     this.state.phase = GamePhase.LOBBY;

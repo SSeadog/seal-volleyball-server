@@ -1,4 +1,4 @@
-import { Client, Room, matchMaker } from "@colyseus/core";
+import { Client, matchMaker } from "@colyseus/core";
 
 /**
  * 매칭 큐에 등록된 플레이어 정보
@@ -149,6 +149,8 @@ export class Matchmaker {
       const totalPlayers = players.length + aiCount;
       console.log(`[Matchmaker] Created game room ${gameRoom.roomId} with ${players.length} human players and ${aiCount} AI players (total: ${totalPlayers})`);
 
+      const lobbyRoomIdsToDispose = [...new Set(players.map((p) => p.roomId))];
+
       // 각 플레이어를 게임 룸으로 이동 (큐 순서 1,2번 → teamIndex 0, 3,4번 → teamIndex 1)
       for (let i = 0; i < players.length; i++) {
         try {
@@ -157,21 +159,43 @@ export class Matchmaker {
             playerIndex: i,
             teamIndex,
             roomId: gameRoom.roomId,
-            roomName: "game_room"
+            roomName: "game_room",
+            /** 게임 룸 join 시 options.lobbyRoomId로 전달 → 게임 종료 후 동일 로비로 복귀 */
+            lobbyRoomId: players[i].roomId,
           });
 
           console.log(`[Matchmaker] Send match_end to player ${players[i].sessionId}`);
-
-          // 원래 로비 룸에서 나가기 (클라이언트가 처리)
-          // 또는 여기서 leave 처리
         } catch (error) {
           console.error(`[Matchmaker] Error moving player ${players[i].sessionId}:`, error);
         }
       }
+
+      // Room.disconnect()는 로비에 남아 있는 소켓을 닫으므로, match_end 수신·게임 룸 조인 직후에 맞추기 위해 약간 지연
+      const LOBBY_DISPOSE_DELAY_MS = 250;
+      setTimeout(() => {
+        void this.disposeLobbyRooms(lobbyRoomIdsToDispose);
+      }, LOBBY_DISPOSE_DELAY_MS);
     } catch (error) {
       console.error("[Matchmaker] Error creating game room:", error);
       // 실패 시 플레이어들을 다시 큐에 추가
       this.matchQueue.unshift(...players);
+    }
+  }
+
+  private async disposeLobbyRooms(roomIds: string[]): Promise<void> {
+    for (const roomId of roomIds) {
+      try {
+        const local = matchMaker.getLocalRoomById(roomId);
+        if (local) {
+          await local.disconnect();
+          console.log(`[Matchmaker] Disposed lobby room ${roomId}`);
+          continue;
+        }
+        await matchMaker.remoteRoomCall(roomId, "disconnect");
+        console.log(`[Matchmaker] Disposed lobby room ${roomId} (remote)`);
+      } catch (e) {
+        console.warn(`[Matchmaker] Could not dispose lobby ${roomId}:`, e);
+      }
     }
   }
 

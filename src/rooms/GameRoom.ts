@@ -92,13 +92,16 @@ export class GameRoom extends Room<GameRoomState> {
   onJoin(client: Client, options: any) {
     console.log(`[GameRoom] Client ${client.sessionId} joined game room ${this.roomId}`);
     console.log(`[GameRoom] Join options:`, options);
+
+    const defaultName = `Player_${client.sessionId.substring(0, 6)}`;
+    const nickname: string = options?.nickname ?? defaultName;
     
     // 이미 플레이어가 등록되어 있으면 업데이트, 없으면 추가
     let player = this.state.players.find(p => p.sessionId === client.sessionId);
     if (!player) {
       player = new Player(
         client.sessionId,
-        options.playerName || `Player_${client.sessionId.substring(0, 6)}`,
+        nickname,
         false
       );
       player.playerIndex = options.playerIndex;
@@ -110,6 +113,14 @@ export class GameRoom extends Room<GameRoomState> {
       setTimeout(() => {
         this.broadcast("playerJoined", player);
       }, 100);
+    } else {
+      // 재접속/재조인 케이스: nickname 최신화
+      player.name = nickname;
+
+      // name은 기존 동작을 최대한 유지 (기본값인 경우에만 갱신)
+      if (!player.name || player.name === defaultName || player.name.startsWith("Player_")) {
+        player.name = nickname;
+      }
     }
 
     // 원래 로비 룸 ID (게임 종료 후 복귀용). 클라이언트 join 시 lobbyRoomId 전달 필요

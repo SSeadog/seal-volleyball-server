@@ -36,10 +36,12 @@ export class LobbyRoom extends Room<LobbyRoomState> {
     if (this.state.players.length === 0)
       this.state.roomOwnerSessionId = client.sessionId;
 
+    const defaultName = `Player_${client.sessionId.substring(0, 6)}`;
+    const nickname: string = options?.nickname ?? defaultName;
     const player = new Player(
       client.sessionId,
-      options.playerName || `Player_${client.sessionId.substring(0, 6)}`,
-      false
+      nickname,
+      false,
     );
     player.playerIndex = this.state.players.length;
     this.state.players.push(player);

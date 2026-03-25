@@ -1,6 +1,7 @@
 import { Room } from "@colyseus/core";
 import { Player } from "../rooms/schema/Player";
 import { GameRoomState } from "../rooms/schema/GameRoomState";
+import { AI_NICKNAME_CANDIDATES } from "../constants/AiNicknameConstants";
 
 /**
  * AI 플레이어 관리 클래스
@@ -18,9 +19,15 @@ export class AIPlayerManager {
    */
   createAIPlayer(): Player {
     this.aiCounter++;
+
+    const nickname =
+      AI_NICKNAME_CANDIDATES[
+        Math.floor(Math.random() * AI_NICKNAME_CANDIDATES.length)
+      ];
+
     const aiPlayer = new Player(
       `ai_${this.room.roomId}_${this.aiCounter}`,
-      `AI_${this.aiCounter}`,
+      nickname,
       true
     );
     return aiPlayer;

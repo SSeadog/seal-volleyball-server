@@ -16,6 +16,12 @@ export class LobbyRoom extends Room<LobbyRoomState> {
   private matchmaker = Matchmaker.getInstance();
 
   onCreate(options: any) {
+    const createdAt = Date.now();
+    console.log(
+      `[LobbyRoom] onCreate roomId=${this.roomId} at=${new Date(createdAt).toISOString()} (${createdAt}) options=`,
+      options
+    );
+
     // 게임 종료 후 동일 roomId로 로비를 다시 만들 때 (GameRoom → matchMaker.createRoom)
     if (options?.restoreLobbyRoomId) {
       this.roomId = options.restoreLobbyRoomId;
@@ -48,10 +54,10 @@ export class LobbyRoom extends Room<LobbyRoomState> {
 
     console.log(`[LobbyRoom] Room ${this.roomId} now has ${this.state.players.length} players`);
 
-    // 클라에게 플레이어 참여했다고 신호 전송 (100ms 지연)
+    // 클라에게 플레이어 참여했다고 신호 전송 (500ms 지연)
     setTimeout(() => {
       this.broadcast("playerJoined", player);
-    }, 100);
+    }, 500);
   }
 
   onLeave(client: Client, consented: boolean) {

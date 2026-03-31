@@ -30,6 +30,12 @@ export class GameRoom extends Room<GameRoomState> {
   private playerLobbyRoomMap: Map<string, string> = new Map();
   
   onCreate(options: any) {
+    const createdAt = Date.now();
+    console.log(
+      `[GameRoom] onCreate roomId=${this.roomId} at=${new Date(createdAt).toISOString()} (${createdAt}) options=`,
+      options
+    );
+
     // 상태 동기화 빈도 설정 (초당 60번)
     // this.patchRate = (1000 / 60); // 60 FPS = 1000ms / 60 = 약 16.67ms
     // this.patchRate = (1000 / 20); // 20 FPS = 1000ms / 20 = 50ms
@@ -109,10 +115,10 @@ export class GameRoom extends Room<GameRoomState> {
       this.setPlayerPosition(player, player.playerIndex);
       this.state.players.push(player);
       
-      // 클라에게 플레이어 참여했다고 신호 전송 (100ms 지연)
+      // 클라에게 플레이어 참여했다고 신호 전송 (500ms 지연)
       setTimeout(() => {
         this.broadcast("playerJoined", player);
-      }, 100);
+      }, 500);
     } else {
       // 재접속/재조인 케이스: nickname 최신화
       player.name = nickname;

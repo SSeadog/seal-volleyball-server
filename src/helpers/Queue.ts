@@ -1,17 +1,17 @@
-export class LinkedListNode<T> {
-  public next: LinkedListNode<T> | null = null;
+export class QueueNode<T> {
+  public next: QueueNode<T> | null = null;
 
   constructor(public value: T) {}
 }
 
 /**
- * 단순 단일 연결 리스트
- * - 앞에서 꺼내기 O(1)
- * - 뒤에 넣기 O(1)
+ * 단순 연결 리스트 기반 큐
+ * - enqueue(뒤에 넣기) O(1)
+ * - dequeue(앞에서 꺼내기) O(1)
  */
-export class LinkedList<T> {
-  private head: LinkedListNode<T> | null = null;
-  private tail: LinkedListNode<T> | null = null;
+export class Queue<T> {
+  private head: QueueNode<T> | null = null;
+  private tail: QueueNode<T> | null = null;
   private _length = 0;
 
   get length(): number {
@@ -22,9 +22,9 @@ export class LinkedList<T> {
     return this._length === 0;
   }
 
-  /** 맨 뒤에 추가 (enqueue) */
-  push(value: T): void {
-    const node = new LinkedListNode(value);
+  /** 맨 뒤에 추가 */
+  enqueue(value: T): void {
+    const node = new QueueNode(value);
     if (!this.head) {
       this.head = this.tail = node;
     } else {
@@ -39,8 +39,8 @@ export class LinkedList<T> {
     return this.head ? this.head.value : undefined;
   }
 
-  /** 맨 앞 요소 제거 후 반환 (dequeue) */
-  shift(): T | undefined {
+  /** 맨 앞 요소 제거 후 반환 */
+  dequeue(): T | undefined {
     if (!this.head) return undefined;
     const node = this.head;
     this.head = node.next;
@@ -57,4 +57,3 @@ export class LinkedList<T> {
     this._length = 0;
   }
 }
-
